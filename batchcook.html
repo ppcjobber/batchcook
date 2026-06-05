@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="theme-color" content="#7A2E12" />
+<title>Batch·cook</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;0,9..144,600;0,9..144,800;1,9..144,500&display=swap" rel="stylesheet" />
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<style>
+  html, body { margin: 0; padding: 0; background: #FBF6EC; }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  @keyframes rise { from { opacity:0; transform: translateY(12px);} to {opacity:1; transform:none;} }
+  .rise { animation: rise .5s cubic-bezier(.2,.7,.2,1) both; }
+  button { font-family: inherit; cursor: pointer; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script type="text/babel">
+const { useState, useMemo } = React;
+
+/* =====================================================================
+   BATCH COOK PLANNER
+   To make it yours, edit two things below:
+     1. PACKS   — your real supermarket items, pack sizes and prices
+     2. RECIPES — your own dishes
+   Everything else runs automatically.
+   ===================================================================== */
+
+// Pantry items you assume you always have (left off the shopping list)
+const STAPLES = new Set(["salt","pepper","olive_oil","stock","garlic","flour","ginger"]);
+
+// Ingredients: the packs you can actually buy. [pack_size, price_in_pounds]
+const PACKS = {
+  mince_beef:   { label:"Beef mince",       unit:"g",   aisle:"Meat",  reusable:true,  packs:[[250,2.20],[500,3.80],[1000,6.50]] },
+  chicken_thigh:{ label:"Chicken thighs",   unit:"g",   aisle:"Meat",  reusable:true,  packs:[[500,3.20],[1000,5.80]] },
+  dried_lentil: { label:"Dried lentils",    unit:"g",   aisle:"Dry",   reusable:true,  packs:[[500,1.20]] },
+  onion:        { label:"Onions",           unit:"g",   aisle:"Veg",   reusable:true,  packs:[[1000,0.90]] },
+  carrot:       { label:"Carrots",          unit:"g",   aisle:"Veg",   reusable:true,  packs:[[1000,0.70]] },
+  celery:       { label:"Celery",           unit:"g",   aisle:"Veg",   reusable:false, packs:[[400,0.85]] },
+  potato:       { label:"Potatoes",         unit:"g",   aisle:"Veg",   reusable:true,  packs:[[2000,1.50]] },
+  pepper_veg:   { label:"Peppers",          unit:"g",   aisle:"Veg",   reusable:false, packs:[[500,1.30]] },
+  spinach:      { label:"Spinach",          unit:"g",   aisle:"Veg",   reusable:false, packs:[[250,0.90]] },
+  mushroom:     { label:"Mushrooms",        unit:"g",   aisle:"Veg",   reusable:false, packs:[[300,0.95]] },
+  tomato_tin:   { label:"Chopped tomatoes", unit:"tin", aisle:"Tins",  reusable:true,  packs:[[400,0.45]] },
+  passata:      { label:"Passata",          unit:"g",   aisle:"Tins",  reusable:true,  packs:[[500,0.60]] },
+  kidney_beans: { label:"Kidney beans",     unit:"tin", aisle:"Tins",  reusable:true,  packs:[[400,0.50]] },
+  chickpea_tin: { label:"Chickpeas",        unit:"tin", aisle:"Tins",  reusable:true,  packs:[[400,0.55]] },
+  coconut_milk: { label:"Coconut milk",     unit:"tin", aisle:"Tins",  reusable:true,  packs:[[400,0.95]] },
+  cream:        { label:"Cream",            unit:"ml",  aisle:"Dairy", reusable:false, packs:[[300,1.10]] },
+  cheese:       { label:"Cheese",           unit:"g",   aisle:"Dairy", reusable:true,  packs:[[250,2.00]] },
+  curry_paste:  { label:"Curry paste",      unit:"g",   aisle:"Dry",   reusable:true,  packs:[[180,1.40]] },
+  chilli_powder:{ label:"Chilli powder",    unit:"g",   aisle:"Dry",   reusable:true,  packs:[[50,1.00]] },
+  rice:         { label:"Rice",             unit:"g",   aisle:"Dry",   reusable:true,  packs:[[1000,1.20]] },
+  pasta_sheet:  { label:"Lasagne sheets",   unit:"g",   aisle:"Dry",   reusable:true,  packs:[[500,1.10]] },
+};
+
+// Recipes. The numbers are the amount needed for 4 portions.
+const r = (id,name,base,servings,ings,opt={}) => ({
+  id,name,base,servings,ings,
+  freezesWell: opt.freezesWell!==false,
+  freezerDays: opt.freezerDays ?? 90,
+  fridgeDays:  opt.fridgeDays ?? 3,
+});
+
+const RECIPES = [
+  // MINCE
+  r("bol","Bolognese","mince_beef",4,{mince_beef:250,onion:140,carrot:80,celery:50,tomato_tin:400}),
+  r("chi","Chilli con carne","mince_beef",4,{mince_beef:350,onion:140,kidney_beans:400,tomato_tin:400,chilli_powder:10}),
+  r("cot","Cottage pie","mince_beef",4,{mince_beef:400,onion:140,carrot:120,potato:800,cheese:60}),
+  r("las","Lasagne","mince_beef",4,{mince_beef:300,onion:140,passata:400,pasta_sheet:200,cheese:100}),
+  r("kee","Keema curry","mince_beef",4,{mince_beef:350,onion:140,curry_paste:60,tomato_tin:200,rice:250}),
+  r("rag","Meatball ragu","mince_beef",4,{mince_beef:300,onion:100,passata:500,cheese:50}),
+  // CHICKEN
+  r("cur","Chicken curry","chicken_thigh",4,{chicken_thigh:400,onion:140,curry_paste:80,coconut_milk:400,rice:250}),
+  r("caj","Cajun chicken & rice","chicken_thigh",4,{chicken_thigh:400,onion:140,pepper_veg:250,rice:250,chilli_powder:8}),
+  r("cas","Chicken casserole","chicken_thigh",4,{chicken_thigh:500,onion:140,carrot:150,potato:500,celery:80}),
+  r("ckp","Chicken & chickpea stew","chicken_thigh",4,{chicken_thigh:400,onion:140,chickpea_tin:400,tomato_tin:400,spinach:100}),
+  r("ccr","Creamy mushroom chicken","chicken_thigh",4,{chicken_thigh:400,onion:100,mushroom:250,cream:250},{freezesWell:false}),
+  // LENTIL
+  r("dhl","Lentil dhal","dried_lentil",4,{dried_lentil:300,onion:140,curry_paste:60,coconut_milk:400,spinach:100}),
+  r("lrg","Lentil ragu","dried_lentil",4,{dried_lentil:250,onion:140,carrot:100,celery:50,passata:500}),
+  r("lsp","Lentil & potato curry","dried_lentil",4,{dried_lentil:250,onion:140,potato:600,curry_paste:80,coconut_milk:400}),
+  r("lch","Lentil chilli","dried_lentil",4,{dried_lentil:300,onion:140,kidney_beans:400,tomato_tin:400,chilli_powder:10}),
+];
+
+const BASES = [
+  { id:"mince_beef",    name:"Mince",   emoji:"🥩", blurb:"Family classics" },
+  { id:"chicken_thigh", name:"Chicken", emoji:"🍗", blurb:"Curries & roasts" },
+  { id:"dried_lentil",  name:"Lentils", emoji:"🫘", blurb:"Cheapest of all" },
+];
+
+// ---------- ENGINE ----------
+function cheapestPacks(ingId, qtyNeeded) {
+  const packs = [...PACKS[ingId].packs].sort((a,b)=>a[0]-b[0]);
+  const sizes = packs.map(p=>p[0]);
+  const price = Object.fromEntries(packs);
+  const maxN = Math.max(2, Math.ceil(qtyNeeded/Math.min(...sizes))+1);
+  let best=null; const idx=sizes.map(()=>0);
+  const rec=(i)=>{
+    if(i===sizes.length){
+      const q=sizes.reduce((s,sz,k)=>s+idx[k]*sz,0);
+      if(q<qtyNeeded) return;
+      const c=sizes.reduce((s,sz,k)=>s+idx[k]*price[sz],0);
+      if(!best||c<best.cost) best={cost:+c.toFixed(2),bought:q,breakdown:sizes.map((sz,k)=>[sz,idx[k]]).filter(([,n])=>n>0)};
+      return;
+    }
+    for(let n=0;n<=maxN;n++){idx[i]=n;rec(i+1);} idx[i]=0;
+  };
+  rec(0); return best;
+}
+function combinations(arr,k){
+  const out=[]; const rec=(start,combo)=>{
+    if(combo.length===k){out.push([...combo]);return;}
+    for(let i=start;i<arr.length;i++){combo.push(arr[i]);rec(i+1,combo);combo.pop();}
+  }; rec(0,[]); return out;
+}
+function singleDishCost(recipe){
+  let total=0;
+  for(const [ing,qty] of Object.entries(recipe.ings)){
+    if(STAPLES.has(ing)||!qty) continue;
+    total+=cheapestPacks(ing,qty).cost;
+  } return total;
+}
+function makePlan(baseId,targetMeals,variety){
+  const cands=RECIPES.filter(x=>x.base===baseId);
+  const servings=4;
+  const nDishes=Math.min(Math.ceil(targetMeals/servings), variety==="distinct"?cands.length:cands.length*2);
+  const pool=variety==="distinct"?cands:[...cands,...cands];
+  let best=null; const seen=new Set();
+  for(const combo of combinations(pool.map((_,i)=>i),nDishes)){
+    const dishes=combo.map(i=>pool[i]);
+    const key=dishes.map(d=>d.id).sort().join("|");
+    if(seen.has(key)) continue; seen.add(key);
+    const distinct=new Set(dishes.map(d=>d.id)).size;
+    if(variety==="distinct"&&distinct<dishes.length) continue;
+    const demand={};
+    for(const d of dishes) for(const [ing,qty] of Object.entries(d.ings)){
+      if(STAPLES.has(ing)||!qty) continue;
+      demand[ing]=(demand[ing]||0)+qty;
+    }
+    let gross=0,used=0,perishWaste=0; const shop=[];
+    for(const [ing,qty] of Object.entries(demand)){
+      const {cost,bought,breakdown}=cheapestPacks(ing,qty);
+      gross+=cost; used+=cost*(qty/bought);
+      const spare=bought-qty; const reusable=PACKS[ing].reusable;
+      if(!reusable&&spare>0) perishWaste++;
+      shop.push({ing,qty,bought,cost,breakdown,spare,reusable});
+    }
+    const meals=dishes.length*servings;
+    const varietyScore=distinct/dishes.length;
+    const cand={dishes,meals,gross:+gross.toFixed(2),
+      cpmBest:+(used/meals).toFixed(2),cpmWorst:+(gross/meals).toFixed(2),
+      varietyScore,perishWaste,shop,
+      saveVsSingle:+(dishes.reduce((s,d)=>s+singleDishCost(d),0)-gross).toFixed(2)};
+    const kt=[-cand.varietyScore,cand.perishWaste,cand.cpmBest];
+    const bt=best?[-best.varietyScore,best.perishWaste,best.cpmBest]:null;
+    if(!best||kt[0]<bt[0]||(kt[0]===bt[0]&&kt[1]<bt[1])||(kt[0]===bt[0]&&kt[1]===bt[1]&&kt[2]<bt[2])) best=cand;
+  }
+  return best;
+}
+function baseTeaser(id){const p=makePlan(id,12,"distinct");return p?p.cpmBest:null;}
+
+// ---------- colours & shared styles ----------
+const C={cream:"#FBF6EC",ink:"#241A12",blaze:"#D6541F",deep:"#7A2E12",olive:"#5C6B3C",sage:"#8B9A6B",gold:"#E0A92E",line:"#E4D9C4"};
+const FD="'Fraunces', Georgia, serif";
+const backBtn={background:"none",border:"none",color:C.sage,fontSize:14,padding:0,marginBottom:6};
+const labelStyle={fontFamily:FD,fontWeight:600,fontSize:17};
+const hintStyle={fontSize:13,color:C.sage,margin:"8px 0 0"};
+const chip=(on)=>({flex:1,padding:"13px 8px",borderRadius:12,fontSize:15,fontWeight:500,border:`1.5px solid ${on?C.deep:C.line}`,background:on?C.deep:"#fff",color:on?C.cream:C.ink});
+const primaryBtn={width:"100%",marginTop:26,padding:"16px",borderRadius:14,border:"none",background:C.blaze,color:"#fff",fontSize:17,fontWeight:600,fontFamily:FD,boxShadow:"0 4px 14px rgba(214,84,31,0.3)"};
+const h1Style={fontFamily:FD,fontWeight:800,fontSize:30,letterSpacing:"-0.02em",margin:"6px 0 0"};
+
+// ---------- helpers ----------
+function useByDate(days){const d=new Date();d.setDate(d.getDate()+days);return d.toLocaleDateString("en-GB",{day:"numeric",month:"short"});}
+function formatPack(ing,sz){const u=PACKS[ing].unit;if(u==="tin")return sz>=400?"tin":sz+u;if(sz>=1000&&(u==="g"||u==="ml"))return (sz/1000)+(u==="g"?"kg":"L");return sz+u;}
+function groupByAisle(shop){const order=["Meat","Veg","Tins","Dairy","Dry"];const g={};for(const it of shop){const a=PACKS[it.ing].aisle;(g[a]=g[a]||[]).push(it);}return order.filter(a=>g[a]).map(a=>[a,g[a]]);}
+
+// ---------- APP ----------
+function App(){
+  const [screen,setScreen]=useState("base");
+  const [base,setBase]=useState(null);
+  const [meals,setMeals]=useState(12);
+  const [variety,setVariety]=useState("distinct");
+  const [plan,setPlan]=useState(null);
+  const [checked,setChecked]=useState({});
+  const teasers=useMemo(()=>Object.fromEntries(BASES.map(b=>[b.id,baseTeaser(b.id)])),[]);
+  const go=(id)=>{setBase(id);setScreen("config");};
+  const build=()=>{setPlan(makePlan(base,meals,variety));setScreen("plan");};
+  const wrap={minHeight:"100vh",background:C.cream,color:C.ink,fontFamily:FD,maxWidth:440,margin:"0 auto",position:"relative",overflow:"hidden"};
+  const pad={padding:"28px 22px 40px"};
+  const baseObj=BASES.find(b=>b.id===base);
+
+  return (
+    <div style={wrap}>
+      <div style={{...pad,paddingBottom:8,display:"flex",alignItems:"baseline",justifyContent:"space-between"}}>
+        <div onClick={()=>setScreen("base")} style={{cursor:"pointer"}}>
+          <div style={{fontFamily:FD,fontWeight:800,fontSize:22,letterSpacing:"-0.02em"}}>Batch<span style={{color:C.blaze}}>·</span>cook</div>
+        </div>
+        <div style={{fontSize:12,color:C.sage,fontStyle:"italic"}}>fill the freezer, not the bin</div>
+      </div>
+
+      {screen==="base"&&(
+        <div style={pad} className="rise">
+          <h1 style={{fontFamily:FD,fontWeight:800,fontSize:34,lineHeight:1.05,margin:"10px 0 6px",letterSpacing:"-0.03em"}}>What are you<br/>in the mood for?</h1>
+          <p style={{color:C.deep,opacity:0.7,margin:"0 0 26px",fontSize:15}}>Pick a base and we'll plan a batch — several dinners, one shop, most for the freezer.</p>
+          <div style={{display:"grid",gap:14}}>
+            {BASES.map((b,i)=>(
+              <button key={b.id} onClick={()=>go(b.id)} className="rise" style={{animationDelay:`${i*70}ms`,textAlign:"left",border:`1.5px solid ${C.line}`,background:"#fff",borderRadius:18,padding:"18px 20px",display:"flex",alignItems:"center",gap:16,boxShadow:"0 2px 0 rgba(0,0,0,0.02)"}}>
+                <span style={{fontSize:34}}>{b.emoji}</span>
+                <span style={{flex:1}}>
+                  <span style={{display:"block",fontFamily:FD,fontWeight:600,fontSize:20}}>{b.name}</span>
+                  <span style={{display:"block",color:C.sage,fontSize:13.5}}>{b.blurb}</span>
+                </span>
+                <span style={{textAlign:"right"}}>
+                  <span style={{display:"block",fontSize:11,color:C.sage,textTransform:"uppercase",letterSpacing:"0.06em"}}>from</span>
+                  <span style={{fontFamily:FD,fontWeight:800,fontSize:19,color:C.blaze}}>£{teasers[b.id]?.toFixed(2)}</span>
+                  <span style={{fontSize:11,color:C.sage}}>/meal</span>
+                </span>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {screen==="config"&&(
+        <div style={pad} className="rise">
+          <button onClick={()=>setScreen("base")} style={backBtn}>← bases</button>
+          <h1 style={h1Style}>{baseObj?.emoji} {baseObj?.name}</h1>
+          <div style={{marginTop:24}}>
+            <label style={labelStyle}>How many meals?</label>
+            <div style={{display:"flex",gap:10,marginTop:10}}>
+              {[4,8,12,16].map(m=>(<button key={m} onClick={()=>setMeals(m)} style={chip(meals===m)}>{m}</button>))}
+            </div>
+            <p style={hintStyle}>≈ {Math.ceil(meals/4)} dishes · 4 portions each</p>
+          </div>
+          <div style={{marginTop:28}}>
+            <label style={labelStyle}>Variety</label>
+            <div style={{display:"flex",gap:10,marginTop:10}}>
+              <button onClick={()=>setVariety("distinct")} style={chip(variety==="distinct")}>All different</button>
+              <button onClick={()=>setVariety("cheapest")} style={chip(variety==="cheapest")}>Cheapest (repeats ok)</button>
+            </div>
+            <p style={hintStyle}>All-different keeps your freezer interesting; cheapest squeezes the bill.</p>
+          </div>
+          <button onClick={build} style={primaryBtn}>Plan it →</button>
+        </div>
+      )}
+
+      {screen==="plan"&&plan&&(
+        <div style={pad} className="rise">
+          <button onClick={()=>setScreen("config")} style={backBtn}>← change</button>
+          <div style={{background:C.deep,color:C.cream,borderRadius:22,padding:"24px 22px",margin:"8px 0 22px",position:"relative",overflow:"hidden"}}>
+            <div style={{position:"absolute",right:-20,top:-20,fontSize:120,opacity:0.07}}>❄</div>
+            <div style={{fontSize:13,letterSpacing:"0.08em",textTransform:"uppercase",opacity:0.7}}>{plan.dishes.length} dinners · {plan.meals} meals</div>
+            <div style={{fontFamily:FD,fontWeight:800,fontSize:40,lineHeight:1,margin:"8px 0 4px"}}>Save £{plan.saveVsSingle.toFixed(2)}</div>
+            <div style={{fontSize:14,opacity:0.85,fontStyle:"italic"}}>vs cooking these one at a time</div>
+          </div>
+          <div style={{display:"grid",gap:12}}>
+            {plan.dishes.map((d,i)=>{
+              const dest=i===0?{t:"Eat today",e:"🍽",c:C.blaze}:d.freezesWell?{t:`Freeze · use by ${useByDate(d.freezerDays)}`,e:"❄️",c:C.olive}:{t:`Fridge · ${d.fridgeDays} days`,e:"🧊",c:C.gold};
+              return (
+                <div key={i} className="rise" style={{animationDelay:`${i*80}ms`,border:`1.5px solid ${C.line}`,background:"#fff",borderRadius:16,padding:"16px 18px"}}>
+                  <div style={{fontFamily:FD,fontWeight:600,fontSize:19}}>{d.name}</div>
+                  <div style={{marginTop:8,display:"inline-flex",alignItems:"center",gap:7,fontSize:13,color:dest.c,fontWeight:500}}><span>{dest.e}</span><span>{dest.t}</span></div>
+                </div>
+              );
+            })}
+          </div>
+          <button onClick={()=>setScreen("shop")} style={primaryBtn}>See shopping list →</button>
+        </div>
+      )}
+
+      {screen==="shop"&&plan&&(
+        <div style={pad} className="rise">
+          <button onClick={()=>setScreen("plan")} style={backBtn}>← plan</button>
+          <h1 style={h1Style}>Shopping list</h1>
+          <p style={{color:C.deep,opacity:0.65,margin:"2px 0 18px",fontSize:14}}>Buy these whole packs. Tap to tick off.</p>
+          {groupByAisle(plan.shop).map(([aisle,items])=>(
+            <div key={aisle} style={{marginBottom:18}}>
+              <div style={{fontSize:12,letterSpacing:"0.1em",textTransform:"uppercase",color:C.sage,marginBottom:8,fontWeight:600}}>{aisle}</div>
+              {items.map(it=>{
+                const on=checked[it.ing];
+                const packStr=it.breakdown.map(([sz,n])=>`${n} × ${formatPack(it.ing,sz)}`).join(" + ");
+                return (
+                  <div key={it.ing} onClick={()=>setChecked(c=>({...c,[it.ing]:!c[it.ing]}))} style={{display:"flex",alignItems:"center",gap:12,padding:"10px 0",borderBottom:`1px solid ${C.line}`,opacity:on?0.45:1,cursor:"pointer"}}>
+                    <span style={{width:22,height:22,borderRadius:6,border:`1.5px solid ${on?C.olive:C.sage}`,background:on?C.olive:"transparent",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontSize:14,flexShrink:0}}>{on?"✓":""}</span>
+                    <span style={{flex:1}}>
+                      <span style={{display:"block",fontWeight:500,fontSize:16,textDecoration:on?"line-through":"none"}}>{PACKS[it.ing].label}</span>
+                      <span style={{display:"block",fontSize:12.5,color:C.sage}}>{packStr}{it.spare>0&&!it.reusable?" · some spare may go to waste":it.spare>0?" · spare keeps for next time":""}</span>
+                    </span>
+                    <span style={{fontFamily:FD,fontWeight:600,fontSize:15}}>£{it.cost.toFixed(2)}</span>
+                  </div>
+                );
+              })}
+            </div>
+          ))}
+          <div style={{background:"#fff",border:`1.5px solid ${C.line}`,borderRadius:16,padding:"16px 18px",marginTop:8}}>
+            <div style={{display:"flex",justifyContent:"space-between",alignItems:"baseline"}}>
+              <span style={{fontFamily:FD,fontWeight:600,fontSize:18}}>Total</span>
+              <span style={{fontFamily:FD,fontWeight:800,fontSize:24,color:C.blaze}}>£{plan.gross.toFixed(2)}</span>
+            </div>
+            <div style={{fontSize:13.5,color:C.deep,opacity:0.7,marginTop:4}}>Works out <b>£{plan.cpmBest.toFixed(2)}–{plan.cpmWorst.toFixed(2)}</b> a meal<span style={{color:C.sage}}> (low end if you use the leftovers)</span></div>
+          </div>
+          <button onClick={()=>setScreen("base")} style={{...primaryBtn,background:"transparent",color:C.deep,border:`1.5px solid ${C.deep}`}}>Plan another →</button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
